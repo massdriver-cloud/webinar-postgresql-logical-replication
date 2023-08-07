@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: pg15_password
       POSTGRES_DB: pg15_db
     ports:
-      - "5433:5433"
+      - "5433:5432"
     volumes:
       - pg15:/var/lib/postgresql/data      
 
