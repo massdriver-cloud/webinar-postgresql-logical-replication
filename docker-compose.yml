@@ -3,45 +3,46 @@ version: '3.8'
 services:
   postgres12:
     image: postgres:12
-    container_name: pg12
+    container_name: postgres12
     restart: unless-stopped
     environment:
-      POSTGRES_USER: your_pg12_user
-      POSTGRES_PASSWORD: your_pg12_password
-      POSTGRES_DB: your_pg12_db
+      POSTGRES_USER: pg12_user
+      POSTGRES_PASSWORD: pg12_password
+      POSTGRES_DB: pg12_db
     ports:
       - "5432:5432"
     volumes:
-      - pg12_data:/var/lib/postgresql/data
+      - pg12:/var/lib/postgresql/data
 
-  spree_app_pg12:
+  job_spree_seed:
     image: massdrivercloud/rails-spree-example
-    container_name: spree_app_pg12
+    container_name: job_spree_seed
+    depends_on:
+      - postgres12
+    volumes:
+      - ./spree-seed-job.sh:/entrypoint.sh
+    environment:
+      DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
+      SECRET_KEY_BASE: foobar
+      ADMIN_EMAIL: test@example.com
+      ADMIN_PASSWORD: password!    
+    entrypoint: ["/bin/sh","/entrypoint.sh"]
+
+  spree_api:
+    image: massdrivercloud/rails-spree-example
+    container_name: spree_api
+    restart: always
     depends_on:
       - postgres12
     ports:
       - "4000:4000"
     environment:
-      DATABASE_URL: postgres://your_pg12_user:your_pg12_password@postgres12:5432/store
+      DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
       SECRET_KEY_BASE: foobar
-      ADMIN_EMAIL: test@example.com
-      ADMIN_PASSWORD: password!
+      LOG_LEVEL: error
       PORT: 4000
-    # Uncomment during dev to get the migration done
     entrypoint: bundle
     command: [exec, rails, server]
-  
-  spree_ui_pg12:
-    container_name: spree_ui_pg12
-    build:
-      context: .
-      dockerfile: ui.Dockerfile
-    ports:
-      - ${DOCKER_HOST_FRONTEND_PORT:-3000}:3000
-    environment:
-      - BACKEND_URL=http://spree_app_pg12:4000
-    volumes:
-      - .:/app
 
 volumes:
-  pg12_data:
+  pg12:
