@@ -17,6 +17,7 @@ The Spree application may restart a few times while the data is getting populate
 Once the application is up visit: `http://localhost:4000/admin` and log in with:
 
 Username: `test@example.com`
+
 Password: `password!`
 
 This is the dataset we will be restoring to PostgreSQL 15.
