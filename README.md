@@ -7,6 +7,7 @@ Before we get started migrating, let's use [docker compose (or the container too
 Run the following command:
 
 ```shell
+git co step1
 docker compose up
 ```
 
