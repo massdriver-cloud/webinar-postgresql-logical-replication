@@ -27,20 +27,6 @@ services:
     volumes:
       - pg15:/var/lib/postgresql/data      
 
-  job_spree_seed:
-    image: massdrivercloud/rails-spree-example
-    container_name: job_spree_seed
-    depends_on:
-      - postgres12
-    volumes:
-      - ./spree-seed-job.sh:/entrypoint.sh
-    environment:
-      DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
-      SECRET_KEY_BASE: foobar
-      ADMIN_EMAIL: test@example.com
-      ADMIN_PASSWORD: password!    
-    entrypoint: ["/bin/sh","/entrypoint.sh"]
-
   spree_api:
     image: massdrivercloud/rails-spree-example
     container_name: spree_api
@@ -56,6 +42,21 @@ services:
       PORT: 4000
     entrypoint: bundle
     command: [exec, rails, server]
+  
+  ### Uncomment if you need to reseed the database
+  # job_spree_seed:
+  #   image: massdrivercloud/rails-spree-example
+  #   container_name: job_spree_seed
+  #   depends_on:
+  #     - postgres12
+  #   volumes:
+  #     - ./spree-seed-job.sh:/entrypoint.sh
+  #   environment:
+  #     DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
+  #     SECRET_KEY_BASE: foobar
+  #     ADMIN_EMAIL: test@example.com
+  #     ADMIN_PASSWORD: password!    
+  #   entrypoint: ["/bin/sh","/entrypoint.sh"]    
 
 volumes:
   pg12:
