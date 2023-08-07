@@ -14,6 +14,19 @@ services:
     volumes:
       - pg12:/var/lib/postgresql/data
 
+  postgres15:
+    image: postgres:15
+    container_name: postgres15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pg15_user
+      POSTGRES_PASSWORD: pg15_password
+      POSTGRES_DB: pg15_db
+    ports:
+      - "5433:5433"
+    volumes:
+      - pg15:/var/lib/postgresql/data      
+
   job_spree_seed:
     image: massdrivercloud/rails-spree-example
     container_name: job_spree_seed
@@ -46,3 +59,4 @@ services:
 
 volumes:
   pg12:
+  pg15:

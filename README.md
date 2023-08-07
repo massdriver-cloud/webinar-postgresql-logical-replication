@@ -22,3 +22,28 @@ Username: `test@example.com`
 Password: `password!`
 
 This is the dataset we will be restoring to PostgreSQL 15.
+
+## Step 2 - PostgreSQL 15
+
+Next, let's add a PostgreSQL 15 instance that we will migrate to.
+
+```shell
+git co step2
+docker compose up
+```
+
+**Note:** We are using port `5433` for the PostgreSQL instance to avoid port collisions.
+
+The Spree application is still using PostgreSQL 12. Browse the admin dashboard to confirm.
+
+You can connect to the PG 15 database:
+
+```shell
+# Get a shell
+docker compose exec postgres15 bash
+
+# Connect using psql
+psql -U pg15_user -d pg15_db
+```
+
+You should see a version like: `psql (15.3 (Debian 15.3-1.pgdg120+1))`
