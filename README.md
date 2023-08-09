@@ -40,6 +40,8 @@ The data in this storefront is what we will be migrating to PostgreSQL 15.
 
 ## Upgrading / Migrating Postgres with Logical Replication
 
+PostgreSQL logical replication is a data synchronization method that enables the replication of individual database changes (such as inserts, updates, and deletes) in a fine-grained manner between two PostgreSQL databases. It uses a publish-subscribe model, allowing changes from a source database's specified tables to be captured, transformed into a logical representation, and then applied to target databases.
+
 With logical replication there are two options for getting your existing data into the destination database:
 
 * Using `copy_data = true` with the replication subscription
