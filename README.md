@@ -2,7 +2,7 @@
 
 ## Setup
 
-Before we get started migrating, we'll use [docker compose (or the container tool of your choosing)](https://docs.docker.com/desktop/) to get an example application up and running to migrate.
+Before we get started migrating, we'll use [docker compose (or the container tool of your choosing)](https://docs.docker.com/desktop/) to get an example e-commerce application (Spree) up and running to migrate.
 
 Run the following command:
 
@@ -275,7 +275,7 @@ DROP PUBLICATION pub_pg1215_migration;
 SELECT pg_drop_replication_slot('sub_pg1215_migration'); -- this may fail if the subscriber already dropped the slot
 ```
 
-This is the recommended approach for large data sets especially migrating or upgrading different networks. It can be time and resource consuming to replicate 100GB between something like Heroku and AWS. This requires additional steps and downtime to prepare.
+This is the recommended approach for large data sets especially migrating or upgrading different networks. It can be time and resource consuming to replicate 100GB between something like Heroku and AWS RDS. This requires additional steps and downtime to prepare.
 
 We will:
 
@@ -288,12 +288,17 @@ We will:
 4. add records, check diff between dbs
 5. enable stream (should get added records)
 
+Stop the Spree API:
 ```shell
 docker compose stop spree_api
+```
 
-# Connect to PG12
+Connect to PG12 and run pg_dump:
+
+```shell
 docker compose exec postgres12 bash
 pg_dump -U pg12_user -F t store > store-dump.tar
+
 psql -U pg12_user -d store
 ```
 
@@ -304,9 +309,13 @@ CREATE PUBLICATION pub_pg1215_migration FOR ALL TABLES;
 SELECT pg_create_logical_replication_slot('sub_pg1215_migration', 'pgoutput');
 ```
 
-docker compose start spree_api
+Restart the Spree API:
 
-On local system:
+```shell
+docker compose start spree_api
+```
+
+Copy dump to PG 15 container:
 
 ```shell
 # Copy schema dump to local filesystem
@@ -316,8 +325,9 @@ docker cp postgres12:/store-dump.tar .
 docker cp ./store-dump.tar postgres15:/store-dump.tar
 ```
 
+Connect to PG 15 and restore:
+
 ```shell
-# Connect to PG 15
 docker compose exec postgres15 bash
 pg_restore -d pg15_db /store-dump.tar --no-owner --role=pg15_user -C -U pg15_user;
 
@@ -332,19 +342,81 @@ CREATE SUBSCRIPTION sub_pg1215_migration
   PUBLICATION pub_pg1215_migration WITH (copy_data = false, create_slot=false, enabled=false, slot_name=sub_pg1215_migration);
 ```
 
-ADD RECORDS IN UI
+At this point the snapshot is loaded on PG 15, but replication has not started. 
 
+**Add and edit some records in the Spree admin dashboard to simulate users and see replication happen.**
+
+On the PG 15 instance enable the subscription
+
+```sql
 ALTER SUBSCRIPTION sub_pg1215_migration ENABLE;
+```
 
-pg 12
-select sent_lsn from  pg_stat_replication;
+You should now be able to run queries on PG 12 and PG 15 and get the same results, for example: `SELECT COUNT(*) from spree_products;`
 
-pg 15
-select received_lsn from  pg_stat_subscription;
+Now let's see what Postgres thinks.
 
-Looks like they're in sync!
+Connect to PG 12 source database:
 
-@@ HERE ORGANIZE THIS
+```shell
+docker compose exec postgres12 bash
+```
+
+Check the replication status:
+
+```sql
+select * from  pg_stat_replication;
+```
+
+Check the values of the log sequence numbers (LSN)
+```
+-[ RECORD 1 ]----+------------------------------
+pid              | 1235
+usesysid         | 10
+usename          | pg12_user
+application_name | sub_pg1215_migration
+client_addr      | 172.25.0.3
+client_hostname  |
+client_port      | 52094
+backend_start    | 2023-08-09 03:59:52.950325+00
+backend_xmin     |
+state            | streaming
+sent_lsn         | 0/25A97D0 <-- These are what you are looking for
+write_lsn        | 0/25A97D0
+flush_lsn        | 0/25A97D0
+replay_lsn       | 0/25A97D0
+write_lag        |
+flush_lag        |
+replay_lag       |
+sync_priority    | 0
+sync_state       | async
+reply_time       | 2023-08-09 04:10:15.565649+00
+```
+
+Let's check the LSN received on the PG 15 instance.
+
+```shell
+docker compose exec postgres15 bash
+```
+
+```sql
+select * from  pg_stat_subscription;
+```
+
+```
+-[ RECORD 1 ]---------+------------------------------
+subid                 | 26874
+subname               | sub_pg1215_migration
+pid                   | 1781
+relid                 |
+received_lsn          | 0/25A97D0 <-- This is what you are looking for
+last_msg_send_time    | 2023-08-09 04:10:25.602431+00
+last_msg_receipt_time | 2023-08-09 04:10:25.602842+00
+latest_end_lsn        | 0/25A97D0
+latest_end_time       | 2023-08-09 04:10:25.602431+00
+```
+
+Looks like they're in sync! Its time to "failover" to PG 15.
 
 ## Failover
 
