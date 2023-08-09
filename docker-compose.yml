@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: pg12_password
       POSTGRES_DB: pg12_db
     ports:
-      - "5432:5432"
+      - 5432
     volumes:
       - pg12:/var/lib/postgresql/data
 
@@ -24,43 +24,28 @@ services:
       POSTGRES_USER: pg15_user
       POSTGRES_PASSWORD: pg15_password
       POSTGRES_DB: pg15_db
-    # Using port 5433 to avoid port collisions on localhost
     ports:
-      - "5433:5432"
+      - 5432
     volumes:
       - pg15:/var/lib/postgresql/data      
 
-  spree_api:
+  spree:
     image: massdrivercloud/rails-spree-example
-    container_name: spree_api
+    container_name: spree
     restart: always
     depends_on:
       - postgres12
+      - postgres15
     ports:
       - "4000:4000"
     environment:
-      DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
-      # DATABASE_URL: postgres://pg15_user:pg15_password@postgres15:5432/store
+      # DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
+      DATABASE_URL: postgres://pg15_user:pg15_password@postgres15:5432/store
       SECRET_KEY_BASE: foobar
       LOG_LEVEL: error
       PORT: 4000
     entrypoint: bundle
     command: [exec, rails, server]
-  
-  # ## Uncomment if you need to reseed the database
-  # job_spree_seed:
-  #   image: massdrivercloud/rails-spree-example
-  #   container_name: job_spree_seed
-  #   depends_on:
-  #     - postgres12
-  #   volumes:
-  #     - ./spree-seed-job.sh:/entrypoint.sh
-  #   environment:
-  #     DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
-  #     SECRET_KEY_BASE: foobar
-  #     ADMIN_EMAIL: test@example.com
-  #     ADMIN_PASSWORD: password!    
-  #   entrypoint: ["/bin/sh","/entrypoint.sh"]    
 
 volumes:
   pg12:

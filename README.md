@@ -7,17 +7,26 @@ Before we get started migrating, we'll use [docker compose (or the container too
 Run the following command:
 
 ```shell
-docker compose up
+docker compose up -d
 ```
 
-TODO: replace job w/ a docker run cmd.
-TODO: suggest opening  multiple tabs and clean up the docker compose connect stuff... 1. docker up, 2. local system 3. pg12, 4. pg15
-TODO: run docker compose in background and tail w/ docker compose logs
-TODO: remove localhost mounted ports
+If you want to see the logs of any of the services you can run `docker compose logs -f`.
 
-This may take a few minutes. It will create a PostgreSQL 12 instance, a Spree E-Commerce instance, a job to populate the PG 12 database with products, and an idle PostgreSQL 15 instance.
+Next we'll seed the database.
 
-**Note**: This webinar/tutorial connects to the source and destination multiple times and includes the docker command each time for doing so. I recommend opening two shells and keeping PG 12 and 15 side by side to simplify following along.
+```shell
+docker compose run --entrypoint bash spree -c "bundle exec rails db:create db:migrate && bundle exec rake db:seed spree_sample:load"
+```
+
+If prompted enter a username and password:
+
+Username: `test@example.com`
+
+Password: `password!`
+
+This may take a few minutes. It will create a PostgreSQL 12 instance, a Spree E-Commerce instance, populate the PG 12 database with products, and an idle PostgreSQL 15 instance.
+
+**Note**: This webinar/tutorial connects to the source and destination multiple times and includes the docker command each time for doing so. I recommend opening two additional shells and keeping PG 12 and 15 side by side to simplify following along.
 
 The Spree application may restart a few times while the data is getting populated.
 
@@ -281,7 +290,7 @@ This process is about 8 steps to get the databases in sync:
 To get started we'll stop the Spree API. This will be the first and probably longest of two downtimes. We stop the app because we don't want records written between the time the database dump is taken and the replication slot is created.
 
 ```shell
-docker compose stop spree_api
+docker compose stop spree
 ```
 
 Connect to PG12 and run pg_dump:
@@ -303,7 +312,7 @@ SELECT pg_create_logical_replication_slot('sub_pg1215_migration', 'pgoutput');
 Restart the Spree API:
 
 ```shell
-docker compose start spree_api
+docker compose start spree
 ```
 
 Copy dump to PG 15 container:
@@ -335,9 +344,9 @@ CREATE SUBSCRIPTION sub_pg1215_migration
 
 At this point the snapshot is loaded on PG 15, but replication has not started. 
 
-**Add and edit some records in the Spree admin dashboard to simulate users and see replication happen.**
+**Add and edit some records in the Spree admin dashboard to simulate users and we'll see replication in a moment.** In the meantime, you can see the record lag by running `SELECT COUNT(*) from spree_products;` in both databases as you add records in the UI.
 
-On the PG 15 instance enable the subscription
+On the PG 15 instance enable the subscription:
 
 ```sql
 ALTER SUBSCRIPTION sub_pg1215_migration ENABLE;
@@ -404,7 +413,7 @@ The failover process is pretty straightforward:
 First, let's put the application in maintenance mode (**DOWNTIME BEGINS**)
 
 ```shell
-docker compose stop spree_api
+docker compose stop spree
 ```
 
 Check the current WAL LSN on **PG 12**:
@@ -461,11 +470,17 @@ Uncomment
 `DATABASE_URL: postgres://pg15_user:pg15_password@postgres15:5432/store`
 
 ```shell
-docker compose up spree_api -d
+docker compose up spree -d
 docker compose stop postgres12
 ```
 
 You should be on Postgres 15!
+
+Tear it all down:
+
+```shell
+docker compose down --remove-orphans --volumes
+```
 
 ## Appendix
 
