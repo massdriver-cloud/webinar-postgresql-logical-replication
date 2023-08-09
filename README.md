@@ -452,13 +452,13 @@ cat sequences.sql | psql -h postgres15 -U pg15_user store
 
 Its time to point the application at the upgraded database.
 
-Find the following line in `docker-compose.yml`:
+Find the following line in `docker-compose.yml` and comment it out:
 
-`postgres://pg12_user:pg12_password@postgres12:5432/store`
+`DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store`
 
-Replace it with
+Uncomment
 
-`postgres://pg15_user:pg15_password@postgres15:5432/store`
+`DATABASE_URL: postgres://pg15_user:pg15_password@postgres15:5432/store`
 
 ```shell
 docker compose up spree_api -d
