@@ -280,7 +280,7 @@ This is the recommended approach for large data sets especially migrating or upg
 
 This process is about 8 steps to get the databases in sync:
 
-1. Stop the Spree API, this will be the beginning of the first downtime 
+1. Stop the Spree API, this will be the beginning of the first **downtime** 
 2. Take a dump of PG 12
 3. Create publication & replication slot on PG 12
 4. Restart the app
@@ -406,7 +406,7 @@ Looks like they're in sync! Its time to "promote" to PG 15.
 
 The promotion process is pretty straightforward:
 
-1. Put any applications that write to your source database in maintenance mode. This will be your second, potentially brief, downtime.
+1. Put any applications that write to your source database in maintenance mode. This will be your second, potentially brief, **downtime**.
 2. Check the replication and subscription status and drop the subscription
 3. Copy sequence data from the source to destination database
 4. Change the applications database connection info to the new database
