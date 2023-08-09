@@ -39,7 +39,8 @@ services:
     ports:
       - "4000:4000"
     environment:
-      DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
+      # DATABASE_URL: postgres://pg12_user:pg12_password@postgres12:5432/store
+      DATABASE_URL: postgres://pg15_user:pg15_password@postgres15:5432/store
       SECRET_KEY_BASE: foobar
       LOG_LEVEL: error
       PORT: 4000

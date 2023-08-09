@@ -12,6 +12,8 @@ docker compose up
 
 TODO: replace job w/ a docker run cmd.
 TODO: suggest opening  multiple tabs and clean up the docker compose connect stuff... 1. docker up, 2. local system 3. pg12, 4. pg15
+TODO: run docker compose in background and tail w/ docker compose logs
+TODO: remove localhost mounted ports
 
 This may take a few minutes. It will create a PostgreSQL 12 instance, a Spree E-Commerce instance, a job to populate the PG 12 database with products, and an idle PostgreSQL 15 instance.
 
@@ -25,7 +27,7 @@ Username: `test@example.com`
 
 Password: `password!`
 
-This is the data in this storefront is what we will be migrating to PostgreSQL 15.
+The data in this storefront is what we will be migrating to PostgreSQL 15.
 
 ## Upgrading / Migrating Postgres with Logical Replication
 
@@ -189,13 +191,25 @@ Connect to PG 12 source database:
 docker compose exec postgres12 bash
 ```
 
-Check the replication status:
+Check the current WAL LSN:
+
+```sql
+select pg_current_wal_lsn();
+```
+
+Check the values of the log sequence numbers (LSN)
+```
+pg_current_wal_lsn
+--------------------
+0/243FA00
+```
+
+Additionally you can look at the replication status for the specific subscription:
 
 ```sql
 select * from  pg_stat_replication;
 ```
 
-Check the values of the log sequence numbers (LSN)
 ```
 -[ RECORD 1 ]----+------------------------------
 pid              | 59
@@ -236,10 +250,10 @@ subid                 | 17694
 subname               | sub_pg1215_migration
 pid                   | 51
 relid                 |
-received_lsn          | 0/243FA00 <-- This are what you are looking for
+received_lsn          | 0/243FA00 <-- Last LSN received
 last_msg_send_time    | 2023-08-08 16:47:17.351882+00
 last_msg_receipt_time | 2023-08-08 16:47:17.352277+00
-latest_end_lsn        | 0/243FA00
+latest_end_lsn        | 0/243FA00 <-- Last LSN reported back to publisher
 latest_end_time       | 2023-08-08 16:47:17.351882+00
 ```
 
@@ -249,46 +263,23 @@ If you are migrating using `copy_data = true` its time to [failover](#failover).
 
 ### Logical replication with `copy_data = false` + pg_dump/pg_restore
 
-If you performed the previous logical replication step, you'll need to reset PG 15 and remove the publisher on PG 12.
-
-**Reset PG 15:**
-
-```shell
-docker compose exec postgres15 bash
-psql -U pg15_user -d store
-```
-```sql
-DROP SUBSCRIPTION sub_pg1215_migration;
-\c pg15_db;
-DROP DATABASE store;
-```
-
-**Drop the publication:**
-
-```shell
-docker compose exec postgres12 bash
-psql -U pg12_user -d store
-```
-
-```sql
-DROP PUBLICATION pub_pg1215_migration;
-SELECT pg_drop_replication_slot('sub_pg1215_migration'); -- this may fail if the subscriber already dropped the slot
-```
+**Note:** If you performed the previous logical replication step, you'll need to reset PG 15 and remove the publisher on PG 12. Click [here](#resetting-the-databases) for instructions.
 
 This is the recommended approach for large data sets especially migrating or upgrading different networks. It can be time and resource consuming to replicate 100GB between something like Heroku and AWS RDS. This requires additional steps and downtime to prepare.
 
-We will:
+This process is about 8 steps to get the databases in sync:
 
-1. stop app **DOWNTIME** dont want records written between database dump and repl slot
-1. Take a dump of PG 12
-2. Create publication & replication slot on PG 12
-3. start app
-3. Restore snapshot to pg 15
-4. Create paused subscription on PG 15
-4. add records, check diff between dbs
-5. enable stream (should get added records)
+1. Stop the Spree API, this will be the beginning of the first downtime 
+2. Take a dump of PG 12
+3. Create publication & replication slot on PG 12
+4. Restart the app
+5. Restore snapshot to pg 15
+6. Create paused subscription on PG 15
+7. Optionally add records to PG 12, check diff between dbs
+8. Enable the subscription to start receiving updates
 
-Stop the Spree API:
+To get started we'll stop the Spree API. This will be the first and probably longest of two downtimes. We stop the app because we don't want records written between the time the database dump is taken and the replication slot is created.
+
 ```shell
 docker compose stop spree_api
 ```
@@ -362,35 +353,17 @@ Connect to PG 12 source database:
 docker compose exec postgres12 bash
 ```
 
-Check the replication status:
+Check the current WAL LSN:
 
 ```sql
-select * from  pg_stat_replication;
+select pg_current_wal_lsn();
 ```
 
 Check the values of the log sequence numbers (LSN)
 ```
--[ RECORD 1 ]----+------------------------------
-pid              | 1235
-usesysid         | 10
-usename          | pg12_user
-application_name | sub_pg1215_migration
-client_addr      | 172.25.0.3
-client_hostname  |
-client_port      | 52094
-backend_start    | 2023-08-09 03:59:52.950325+00
-backend_xmin     |
-state            | streaming
-sent_lsn         | 0/25A97D0 <-- These are what you are looking for
-write_lsn        | 0/25A97D0
-flush_lsn        | 0/25A97D0
-replay_lsn       | 0/25A97D0
-write_lag        |
-flush_lag        |
-replay_lag       |
-sync_priority    | 0
-sync_state       | async
-reply_time       | 2023-08-09 04:10:15.565649+00
+pg_current_wal_lsn
+--------------------
+0/25A97D0
 ```
 
 Let's check the LSN received on the PG 15 instance.
@@ -409,10 +382,10 @@ subid                 | 26874
 subname               | sub_pg1215_migration
 pid                   | 1781
 relid                 |
-received_lsn          | 0/25A97D0 <-- This is what you are looking for
+received_lsn          | 0/25A97D0 <-- Last LSN received
 last_msg_send_time    | 2023-08-09 04:10:25.602431+00
 last_msg_receipt_time | 2023-08-09 04:10:25.602842+00
-latest_end_lsn        | 0/25A97D0
+latest_end_lsn        | 0/25A97D0 <-- Last LSN reported back to publisher
 latest_end_time       | 2023-08-09 04:10:25.602431+00
 ```
 
@@ -420,23 +393,106 @@ Looks like they're in sync! Its time to "failover" to PG 15.
 
 ## Failover
 
-**DOWNTIME**
+The failover process is pretty straightforward:
 
-**Important!**
+1. Put any applications that write to your source database in maintenance mode. This will be your second, potentially brief, downtime.
+2. Check the replication and subscription status and drop the subscription
+3. Copy sequence data from the source to destination database
+4. Change the applications database connection info to the new database
+5. Bring your application back up
 
-Sequence data is not copied during logical replication. This can be seen by running the following command on both databases:
+First, let's put the application in maintenance mode (**DOWNTIME BEGINS**)
+
+```shell
+docker compose stop spree_api
+```
+
+Check the current WAL LSN on **PG 12**:
+
+```sql
+select pg_current_wal_lsn();
+-- -[ RECORD 1 ]--+----------
+-- pg_current_wal_lsn | 0/25A97D0
+```
+
+Check that the last LSN acknowledged matches on **PG 15**:
+
+```sql
+select latest_end_lsn from pg_stat_subscription where subname = 'sub_pg1215_migration';
+-- -[ RECORD 1 ]--+----------
+-- latest_end_lsn | 0/25A97D0
+```
+
+**Note:** Another great tool for monitoring replication is [PG Metrics](https://pgmetrics.io/docs/index.html).
+
+Once the two values match you can drop the SUBSCRIPTION on **PG 15**:
+
+```sql
+DROP SUBSCRIPTION sub_pg1215_migration;
+```
+
+**Important!** Now you'll need to sync the sequence data between PG 12 and PG 15. Sequences in PostgreSQL are database objects that provide a way to generate unique numeric values, often used for auto-incrementing primary keys in tables. Sequences **are not** replicated with logical replication. Skipping this step will result potentially conflicting primary key values for auto incrementing keys.
+
+
+Run the following command on both databases to see the differnces in sequence data:
 
 ```sql
 SELECT sequencename, last_value
 FROM pg_sequences
-ORDER BY last_value DESC NULLS LAST;
+ORDER BY last_value DESC NULLS LAST, sequencename;
 ```
 
-* Pause App
-* check repl & sub status ... drop subscripton
-  **Note:** Another great tool for monitoring replication is [PGMetrics](https://pgmetrics.io/docs/index.html).
-* update sequences
-  `psql -h $old_instance -XAtqc "SELECT $$select setval('$$ || quote_ident(schemaname)||$$.$$|| quote_ident(sequencename) || $$', $$ || last_value || $$); $$ AS sql FROM pg_sequences" store | psql -h $new_instance store`
-* change dns/auth for app
-* start!
-* verify data
+Run the following command from th PG 15's shell or an instance that can access both databases:
+
+```shell
+psql -h postgres12 -U pg12_user -XAtqc 'SELECT $$select setval($$ || quote_literal(sequencename) || $$, $$ || last_value || $$); $$ AS sql FROM pg_sequences' store > sequences.sql
+
+cat sequences.sql | psql -h postgres15 -U pg15_user store
+```
+
+Its time to point the application at the upgraded database.
+
+Find the following line in `docker-compose.yml`:
+
+`postgres://pg12_user:pg12_password@postgres12:5432/store`
+
+Replace it with
+
+`postgres://pg15_user:pg15_password@postgres15:5432/store`
+
+```shell
+docker compose up spree_api -d
+docker compose stop postgres12
+```
+
+You should be on Postgres 15!
+
+## Appendix
+
+### Resetting the Databases
+
+The following steps can be used to remove publications, subscriptions, and the PG 15 data created in the steps above.
+
+**Reset PG 15:**
+
+```shell
+docker compose exec postgres15 bash
+psql -U pg15_user -d store
+```
+```sql
+DROP SUBSCRIPTION sub_pg1215_migration;
+\c pg15_db;
+DROP DATABASE store;
+```
+
+**Drop the publication on PG 12:**
+
+```shell
+docker compose exec postgres12 bash
+psql -U pg12_user -d store
+```
+
+```sql
+DROP PUBLICATION pub_pg1215_migration;
+SELECT pg_drop_replication_slot('sub_pg1215_migration'); -- this may fail if the subscriber already dropped the slot
+```
