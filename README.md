@@ -268,7 +268,7 @@ latest_end_time       | 2023-08-08 16:47:17.351882+00
 
 Looks like they are in sync! The difference between `last_msg_send_time` and `last_msg_receipt_time` can give you an idea of lag given both instances time are in sync.
 
-If you are migrating using `copy_data = true` its time to [failover](#failover).
+If you are migrating using `copy_data = true` its time to [promote](#database-promotion) your database.
 
 ### Logical replication with `copy_data = false` + pg_dump/pg_restore
 
@@ -398,11 +398,11 @@ latest_end_lsn        | 0/25A97D0 <-- Last LSN reported back to publisher
 latest_end_time       | 2023-08-09 04:10:25.602431+00
 ```
 
-Looks like they're in sync! Its time to "failover" to PG 15.
+Looks like they're in sync! Its time to "promote" to PG 15.
 
-## Failover
+## Database Promotion
 
-The failover process is pretty straightforward:
+The promotion process is pretty straightforward:
 
 1. Put any applications that write to your source database in maintenance mode. This will be your second, potentially brief, downtime.
 2. Check the replication and subscription status and drop the subscription
@@ -458,6 +458,8 @@ psql -h postgres12 -U pg12_user -XAtqc 'SELECT $$select setval($$ || quote_liter
 
 cat sequences.sql | psql -h postgres15 -U pg15_user store
 ```
+
+If your application has materialized views, those will need to be manually refreshed as they are not automatically refreshed
 
 Its time to point the application at the upgraded database.
 
